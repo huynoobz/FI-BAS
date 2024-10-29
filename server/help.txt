@@ -1,0 +1,15 @@
+Usage:
+    command [OPTIONS] [ARGUMENTS]
+
+Command and options:
+	agents	-			Agent related commands
+		list			List of agents
+		id [agent's id]		Show detail of an specific agent
+		remove [agent's id]	Remove a specific agent
+		remove_all		Remove all agents
+
+	server	-			Server related commands
+		status			Show all current info that related to server (port, key, ...)
+
+Example:
+	agents list			This command will show the list of agents
