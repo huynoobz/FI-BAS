@@ -13,6 +13,7 @@ import json
 import random
 import time
 import ctypes
+from concurrent.futures import ThreadPoolExecutor
 
 os_info = {
         "OS Name": os.name,
@@ -24,6 +25,8 @@ os_info = {
         "Platform": platform.platform(),
         "Architecture": platform.architecture()[0]
     }
+
+attacks = ['ping_scan']
 
 n_agents = 0
 
@@ -203,11 +206,52 @@ def sec_sendall2all(message: bytes, agents: list, key, nonce):
     for agent in agents:
         sec_sendall(message, agent.sock, key, nonce)
 
+def ping(host):
+    param = "-n" if platform.system().lower() == "windows" else "-c"
+    command = ["ping", param, "1", host]
+
+    try:
+        result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        return result.returncode == 0
+    except Exception as e:
+        return False
+
+def ping_scan():
+    network_prefix = input("Enter target network prefix (ex:192.168.1): ")
+    
+    reachable_hosts = []
+
+    def check_host(ip):
+        if ping(ip):
+            reachable_hosts.append(ip)
+
+    with ThreadPoolExecutor(max_workers=10) as executor:  # Use threading for faster scanning
+        for i in range(1, 255 + 1):
+            ip = "{}.{}".format(network_prefix, i)
+            executor.submit(check_host, ip)
+
+    c_a=0
+    for agent in agents:
+        if agent.address in reachable_hosts:
+            c_a+=1
+
+    print("*There are {}/{} agents exposed by ping scan.".format(c_a,len(agents)))
+    if c_a == len(agents):
+        print("** Your network has NO defense against ping scan!")
+    elif c_a > 0:
+        print("** Your network can prevent A PART of ping scan!")
+    elif len(reachable_hosts) == 0:
+        print("** Your network ABSOLUTELY prevent against ping scan!")
+    else:
+        print("** Your network CAN prevent ping scan!")
+
 def excute_cmd(cmd_args: list): ###
    try:
     match cmd_args[0]:
         case "":
             return
+        case "simulate":
+            simulate_cmd(cmd_args)
         case "agents":
             agents_cmd(cmd_args)
         case "server":
@@ -222,6 +266,24 @@ def excute_cmd(cmd_args: list): ###
    except:
     print("*Unknown command. Please type \"help\" for help.")
 
+def simulate_cmd(cmd_args: list):
+    match cmd_args[1]:
+        case "all":
+            for attack in attacks:
+                if attack in globals():
+                    globals()[attack]()
+                print("\n---\n")
+        
+        case "help":
+            with open("help.txt",'r') as help_:
+                print(help_.read())
+        case _:
+            if attack in globals():
+                globals()[attack]()
+            else:
+                print("*Unknown command. Please type \"help\" for help.")
+
+    return
 def agent_exec_cmd(cmd_args: list):
     match cmd_args[1]:
         case "all":
@@ -295,10 +357,10 @@ def agents_cmd(cmd_args: list):
 def server_cmd(cmd_args: list):
     match cmd_args[1]:
         case "status":
-            print("Server's communicate port: {}\nServer's beacon port: {}\nServer's secret key: {}\nServer's nonce: {}\nServer's OS info:".format(com_port,bea_port,base64.b64encode(key).decode("utf-8"),base64.b64encode(nonce).decode("utf-8")))
-            for key, value in os_info.items():
-                print("{}: {}".format(key,value))
-
+            print("Server's communicate port: {}\nServer's beacon port: {}\nServer's secret key: {}\nServer's nonce: {}\nServer's OS info:"
+                  .format(com_port,bea_port,base64.b64encode(key).decode("utf-8"),base64.b64encode(nonce).decode("utf-8")))
+            for key_, value in os_info.items():
+                print("{}: {}".format(key_,value))
         case "help":
             with open("help.txt",'r') as help_:
                 print(help_.read())
