@@ -4,6 +4,7 @@ import os
 import sys
 import subprocess
 import signal
+from tkinter.tix import Tree
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 import base64
@@ -14,6 +15,9 @@ import random
 import time
 import ctypes
 from concurrent.futures import ThreadPoolExecutor
+import nmap
+from scapy.all import ARP, Ether, srp
+
 
 os_info = {
         "OS Name": os.name,
@@ -26,9 +30,11 @@ os_info = {
         "Architecture": platform.architecture()[0]
     }
 
-attacks = ['ping_scan']
+attacks = ['ping_scan','syn_scan','udp_scan', 'arp_scan', 'ack_scan','fin_scan','xmas_scan','null_scan']
 
 n_agents = 0
+
+parameter_list = {}
 
 # Create a socket
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -43,6 +49,11 @@ nonce = 0
 
 com_port = 0
 bea_port = 0
+
+if os_info["System"] == "Windows":
+    nm_scanner = nmap.PortScanner(nmap_search_path=('C:\\Program Files (x86)\\Nmap\\nmap.exe'))
+else:
+    nm_scanner = nmap.PortScanner()
 
 class Agent:
     b_sock=0
@@ -70,10 +81,12 @@ def start_listen():
     # Get the port number
     port = sock.getsockname()[1]
     print("*Start communicate channel on port: {}".format(port))
+    global com_port
     com_port = port
 
     port = b_sock.getsockname()[1]
     print("*Start beacon channel on port: {}".format(port))
+    global bea_port
     bea_port = port
     
     # Listen for connections (optional)
@@ -83,6 +96,7 @@ def start_listen():
         while True:
             client_socket, client_address = sock.accept()
             beacon_socket, client_address = b_sock.accept()
+            beacon_socket.settimeout(60)
 
             nonce_ = sec_recv(client_socket, key, nonce)
             if nonce_ == nonce:
@@ -195,40 +209,29 @@ def decrypt_mess(encrypted_message: bytes, key: bytes, nonce: bytes, tag: bytes)
     return decrypted_message
 
 def sec_recv(sock: socket, key, nonce) -> bytes:
-    d_len = int.from_bytes(sock.recv(4), byteorder="big")
-    data = sock.recv(d_len)
-    json_obj = json.loads(data)
-    mess = decrypt_mess(base64.b64decode(json_obj["enc_mess"].encode()), key, nonce, base64.b64decode(json_obj["tag"].encode()))
+    try:
+        d_len = int.from_bytes(sock.recv(4), byteorder="big")
+        data = sock.recv(d_len)
+        json_obj = json.loads(data)
+        mess = decrypt_mess(base64.b64decode(json_obj["enc_mess"].encode()), key, nonce, base64.b64decode(json_obj["tag"].encode()))
 
-    return mess
+        return mess
+    except:
+        return 
 
 def sec_sendall2all(message: bytes, agents: list, key, nonce):
     for agent in agents:
         sec_sendall(message, agent.sock, key, nonce)
 
-def ping(host):
-    param = "-n" if platform.system().lower() == "windows" else "-c"
-    command = ["ping", param, "1", host]
-
-    try:
-        result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        return result.returncode == 0
-    except Exception as e:
-        return False
-
 def ping_scan():
-    network_prefix = input("Enter target network prefix (ex:192.168.1): ")
-    
-    reachable_hosts = []
+    try:
+        target_network = parameter_list['target_network']
+    except:
+        target_network = input("Enter target network (ex:192.168.1.0/24): ")
 
-    def check_host(ip):
-        if ping(ip):
-            reachable_hosts.append(ip)
+    a = nm_scanner.scan(hosts=target_network, arguments='-sn')
 
-    with ThreadPoolExecutor(max_workers=10) as executor:  # Use threading for faster scanning
-        for i in range(1, 255 + 1):
-            ip = "{}.{}".format(network_prefix, i)
-            executor.submit(check_host, ip)
+    reachable_hosts = [host for host in nm_scanner.all_hosts() if nm_scanner[host].state() == "up"]
 
     c_a=0
     for agent in agents:
@@ -236,20 +239,364 @@ def ping_scan():
             c_a+=1
 
     print("*There are {}/{} agents exposed by ping scan.".format(c_a,len(agents)))
-    if c_a == len(agents):
+    if c_a == len(agents) and c_a!=0:
         print("** Your network has NO defense against ping scan!")
     elif c_a > 0:
         print("** Your network can prevent A PART of ping scan!")
     elif len(reachable_hosts) == 0:
         print("** Your network ABSOLUTELY prevent against ping scan!")
+        return False
     else:
         print("** Your network CAN prevent ping scan!")
+    return True
+
+def syn_scan():
+    try:
+        target_network = parameter_list['target_network']
+    except:
+        target_network = input("Enter target network (ex:192.168.1.0/24): ")
+    
+    nm_scanner.scan(hosts=target_network, ports='1-1000', arguments='-sS')
+
+    results = {}
+    
+    for host in nm_scanner.all_hosts():
+      if nm_scanner[host].state() == 'up':
+                open_count = 0
+                closed_count = 0
+                filtered_count = 0            
+                if 'tcp' in nm_scanner[host]:
+                    for port, details in nm_scanner[host]['tcp'].items():
+                        if details['state'] == 'open':
+                            open_count += 1
+                        elif details['state'] == 'closed':
+                            closed_count += 1
+                        elif 'filtered' in details['state']:
+                            filtered_count += 1
+                if closed_count == 0 and open_count+filtered_count!=1000:
+                    closed_count = 1000 - open_count - filtered_count
+                results[host] = [open_count, closed_count, filtered_count]
+
+    c_a={}
+    for agent in agents:
+        if agent.address in results.keys():
+            c_a[agent.id]=results[agent.address]
+
+    print("*There are {}/{} agents exposed by SYN scan.".format(len(c_a),len(agents)))
+
+    c=0
+    for i in c_a.keys():
+        print("*Agent's id: {}\n*Agent's exposed ports: {}/1000\n*Agent's exposed open ports: {}\n\n---\n"
+                .format(i, 1000 - c_a[i][2], c_a[i][0]))
+        if c_a[i][2] == 0:
+            c+=1
+
+    if c == len(agents) and c!=0:
+        print("** Your agents have NO defense against SYN scan!")
+    elif c > 0:
+        print("** Your agents CAN prevent SYN scan!")
+    elif c == 0:
+        print("** Your agents ABSOLUTELY prevent against SYN scan!")
+        return False
+    return True
+    
+def udp_scan():
+    try:
+        target_network = parameter_list['target_network']
+    except:
+        target_network = input("Enter target network (ex:192.168.1.0/24): ")
+    
+    nm_scanner.scan(hosts=target_network, ports='1-1000', arguments='-sU')
+
+    results = {}
+    
+    for host in nm_scanner.all_hosts():
+      if nm_scanner[host].state() == 'up':
+                open_count = 0
+                closed_count = 0
+                filtered_count = 0            
+                if 'tcp' in nm_scanner[host]:
+                    for port, details in nm_scanner[host]['tcp'].items():
+                        if details['state'] == 'open':
+                            open_count += 1
+                        elif details['state'] == 'closed':
+                            closed_count += 1
+                        elif 'filtered' in details['state']:
+                            filtered_count += 1
+                if closed_count == 0 and open_count+filtered_count!=1000:
+                    closed_count = 1000 - open_count - filtered_count
+                results[host] = [open_count, closed_count, filtered_count]
+
+    c_a={}
+    for agent in agents:
+        if agent.address in results.keys():
+            c_a[agent.id]=results[agent.address]
+
+    print("*There are {}/{} agents exposed by UDP scan.".format(len(c_a),len(agents)))
+
+    c=0
+    for i in c_a.keys():
+        print("*Agent's id: {}\n*Agent's exposed ports: {}/1000\n*Agent's exposed open ports: {}\n\n---\n"
+                .format(i, 1000 - c_a[i][2], c_a[i][0]))
+        if c_a[i][2] == 0:
+            c+=1
+
+    if c == len(agents) and c!=0:
+        print("** Your agents have NO defense against UDP scan!")
+    elif c > 0:
+        print("** Your agents CAN prevent UDP scan!")
+    elif c == 0:
+        print("** Your agents ABSOLUTELY prevent against UDP scan!")
+        return False
+    return True
+
+def arp_scan():
+    try:
+        target_network = parameter_list['target_network']
+    except:
+        target_network = input("Enter target network (ex:192.168.1.0/24): ")
+
+    # Create an ARP request packet
+    arp_request = ARP(pdst=target_network)
+    
+    # Wrap it in an Ethernet frame
+    broadcast = Ether(dst="ff:ff:ff:ff:ff:ff")
+    
+    # Combine the Ethernet frame and ARP request
+    arp_request_broadcast = broadcast / arp_request
+    
+    # Send the packet and capture responses
+    answered, unanswered = srp(arp_request_broadcast, timeout=2, verbose=False)
+    
+    # Parse responses
+    reachable_hosts = []
+    for sent, received in answered:
+        reachable_hosts.append(received.psrc)
+    
+    c_a=0
+    for agent in agents:
+        if agent.address in reachable_hosts:
+            c_a+=1
+
+    print("*There are {}/{} agents exposed by ARP scan.".format(c_a,len(agents)))
+    if c_a == len(agents) and c_a!=0:
+        print("** Your network has NO defense against ARP scan!")
+    elif c_a > 0:
+        print("** Your network can prevent A PART of ARP scan!")
+    elif len(reachable_hosts) == 0:
+        print("** Your network ABSOLUTELY prevent against ARP scan!")
+        return False
+    else:
+        print("** Your network CAN prevent ARP scan!")
+    return True
+
+def ack_scan():
+    try:
+        target_network = parameter_list['target_network']
+    except:
+        target_network = input("Enter target network (ex:192.168.1.0/24): ")
+    
+    nm_scanner.scan(hosts=target_network, ports='1-1000', arguments='-sA')
+
+    results = {}
+    
+    for host in nm_scanner.all_hosts():
+      if nm_scanner[host].state() == 'up':
+                open_count = 0
+                closed_count = 0
+                filtered_count = 0            
+                if 'tcp' in nm_scanner[host]:
+                    for port, details in nm_scanner[host]['tcp'].items():
+                        if details['state'] == 'open':
+                            open_count += 1
+                        elif details['state'] == 'closed':
+                            closed_count += 1
+                        elif 'filtered' in details['state']:
+                            filtered_count += 1
+                if closed_count == 0 and open_count+filtered_count!=1000:
+                    closed_count = 1000 - open_count - filtered_count
+                results[host] = [open_count, closed_count, filtered_count]
+
+    c_a={}
+    for agent in agents:
+        if agent.address in results.keys():
+            c_a[agent.id]=results[agent.address]
+
+    print("*There are {}/{} agents exposed by ACK scan.".format(len(c_a),len(agents)))
+
+    c=0
+    for i in c_a.keys():
+        print("*Agent's id: {}\n*Agent's exposed ports: {}/1000\n*Agent's exposed open ports: {}\n\n---\n"
+                .format(i, 1000 - c_a[i][2], c_a[i][0]))
+        if c_a[i][2] == 0:
+            c+=1
+
+    if c == len(agents) and c!=0:
+        print("** Your agents have NO defense against ACK scan!")
+    elif c > 0:
+        print("** Your agents CAN prevent ACK scan!")
+    elif c == 0:
+        print("** Your agents ABSOLUTELY prevent against ACK scan!")
+        return False
+    return True
+
+def fin_scan():
+    try:
+        target_network = parameter_list['target_network']
+    except:
+        target_network = input("Enter target network (ex:192.168.1.0/24): ")
+    
+    nm_scanner.scan(hosts=target_network, ports='1-1000', arguments='-sF')
+
+    results = {}
+    
+    for host in nm_scanner.all_hosts():
+      if nm_scanner[host].state() == 'up':
+                open_count = 0
+                closed_count = 0
+                filtered_count = 0            
+                if 'tcp' in nm_scanner[host]:
+                    for port, details in nm_scanner[host]['tcp'].items():
+                        if details['state'] == 'open':
+                            open_count += 1
+                        elif details['state'] == 'closed':
+                            closed_count += 1
+                        elif 'filtered' in details['state']:
+                            filtered_count += 1
+                if closed_count == 0 and open_count+filtered_count!=1000:
+                    closed_count = 1000 - open_count - filtered_count
+                results[host] = [open_count, closed_count, filtered_count]
+
+    c_a={}
+    for agent in agents:
+        if agent.address in results.keys():
+            c_a[agent.id]=results[agent.address]
+
+    print("*There are {}/{} agents exposed by FIN scan.".format(len(c_a),len(agents)))
+
+    c=0
+    for i in c_a.keys():
+        print("*Agent's id: {}\n*Agent's exposed ports: {}/1000\n*Agent's exposed open ports: {}\n\n---\n"
+                .format(i, 1000 - c_a[i][2], c_a[i][0]))
+        if c_a[i][2] == 0:
+            c+=1
+
+    if c == len(agents) and c!=0:
+        print("** Your agents have NO defense against FIN scan!")
+    elif c > 0:
+        print("** Your agents CAN prevent FIN scan!")
+    elif c == 0:
+        print("** Your agents ABSOLUTELY prevent against FIN scan!")
+        return False
+    return True
+
+def xmas_scan():
+    try:
+        target_network = parameter_list['target_network']
+    except:
+        target_network = input("Enter target network (ex:192.168.1.0/24): ")
+    
+    nm_scanner.scan(hosts=target_network, ports='1-1000', arguments='-sX')
+
+    results = {}
+    
+    for host in nm_scanner.all_hosts():
+      if nm_scanner[host].state() == 'up':
+                open_count = 0
+                closed_count = 0
+                filtered_count = 0            
+                if 'tcp' in nm_scanner[host]:
+                    for port, details in nm_scanner[host]['tcp'].items():
+                        if details['state'] == 'open':
+                            open_count += 1
+                        elif details['state'] == 'closed':
+                            closed_count += 1
+                        elif 'filtered' in details['state']:
+                            filtered_count += 1
+                if closed_count == 0 and open_count+filtered_count!=1000:
+                    closed_count = 1000 - open_count - filtered_count
+                results[host] = [open_count, closed_count, filtered_count]
+
+    c_a={}
+    for agent in agents:
+        if agent.address in results.keys():
+            c_a[agent.id]=results[agent.address]
+
+    print("*There are {}/{} agents exposed by Xmas scan.".format(len(c_a),len(agents)))
+
+    c=0
+    for i in c_a.keys():
+        print("*Agent's id: {}\n*Agent's exposed ports: {}/1000\n*Agent's exposed open ports: {}\n\n---\n"
+                .format(i, 1000 - c_a[i][2], c_a[i][0]))
+        if c_a[i][2] == 0:
+            c+=1
+
+    if c == len(agents) and c!=0:
+        print("** Your agents have NO defense against Xmas scan!")
+    elif c > 0:
+        print("** Your agents CAN prevent Xmas scan!")
+    elif c == 0:
+        print("** Your agents ABSOLUTELY prevent against Xmas scan!")
+        return False
+    return True
+
+def null_scan():
+    try:
+        target_network = parameter_list['target_network']
+    except:
+        target_network = input("Enter target network (ex:192.168.1.0/24): ")
+    
+    nm_scanner.scan(hosts=target_network, ports='1-1000', arguments='-sX')
+
+    results = {}
+    
+    for host in nm_scanner.all_hosts():
+      if nm_scanner[host].state() == 'up':
+                open_count = 0
+                closed_count = 0
+                filtered_count = 0            
+                if 'tcp' in nm_scanner[host]:
+                    for port, details in nm_scanner[host]['tcp'].items():
+                        if details['state'] == 'open':
+                            open_count += 1
+                        elif details['state'] == 'closed':
+                            closed_count += 1
+                        elif 'filtered' in details['state']:
+                            filtered_count += 1
+                if closed_count == 0 and open_count+filtered_count!=1000:
+                    closed_count = 1000 - open_count - filtered_count
+                results[host] = [open_count, closed_count, filtered_count]
+
+    c_a={}
+    for agent in agents:
+        if agent.address in results.keys():
+            c_a[agent.id]=results[agent.address]
+
+    print("*There are {}/{} agents exposed by NULL scan.".format(len(c_a),len(agents)))
+
+    c=0
+    for i in c_a.keys():
+        print("*Agent's id: {}\n*Agent's exposed ports: {}/1000\n*Agent's exposed open ports: {}\n\n---\n"
+                .format(i, 1000 - c_a[i][2], c_a[i][0]))
+        if c_a[i][2] == 0:
+            c+=1
+
+    if c == len(agents) and c!=0:
+        print("** Your agents have NO defense against NULL scan!")
+    elif c > 0:
+        print("** Your agents CAN prevent NULL scan!")
+    elif c == 0:
+        print("** Your agents ABSOLUTELY prevent against NULL scan!")
+        return False
+    return True
 
 def excute_cmd(cmd_args: list): ###
    try:
     match cmd_args[0]:
         case "":
             return
+        case "set_para":
+            set_para_cmd(cmd_args)
         case "simulate":
             simulate_cmd(cmd_args)
         case "agents":
@@ -270,20 +617,35 @@ def simulate_cmd(cmd_args: list):
     match cmd_args[1]:
         case "all":
             for attack in attacks:
+                print("#{}".format(attack))
                 if attack in globals():
                     globals()[attack]()
-                print("\n---\n")
+                print("\n------\n")
         
         case "help":
             with open("help.txt",'r') as help_:
                 print(help_.read())
         case _:
-            if attack in globals():
-                globals()[attack]()
+            if cmd_args[1] in globals():
+                globals()[cmd_args[1]]()
             else:
-                print("*Unknown command. Please type \"help\" for help.")
+                print("*simulate error. Please type \"help\" for help.")
 
-    return
+def set_para_cmd(cmd_args: list):
+   global parameter_list
+
+   if cmd_args[1] == 'list':
+       print(parameter_list)
+       return
+
+   try:
+    paras = cmd_args[1:]
+    for para in paras:
+        a = para.split('=')
+        parameter_list[a[0]] = a[1]
+   except:
+        print("*set_para error. Please type \"help\" for help.")
+
 def agent_exec_cmd(cmd_args: list):
     match cmd_args[1]:
         case "all":
@@ -315,7 +677,7 @@ def agent_exec_cmd(cmd_args: list):
             with open("help.txt",'r') as help_:
                 print(help_.read())
         case _:
-            print("*Unknown command. Please type \"help\" for help.")
+            print("*agent_exec error. Please type \"help\" for help.")
 
 def agents_cmd(cmd_args: list):
     match cmd_args[1]:
@@ -392,7 +754,7 @@ if __name__ == "__main__":
     excute_cmd(cmd_args)
     while True:
         print("***")
-        cmd = input(">")
+        cmd = input("> ")
         cmd_args = cmd.split()
         print("***")
         excute_cmd(cmd_args)

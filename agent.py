@@ -86,7 +86,7 @@ def handle_beacon(init_n:int,sock:socket):
     while True:
         try:
             sleep(30)
-            sec_sendall(init_n.to_bytes(64,byteorder='big'),sock)
+            sec_sendall(init_n.to_bytes(64,byteorder='big'),sock, key, nonce)
             n = int.from_bytes(sec_recv(sock, key, nonce), byteorder='big')
             if (n - init_n == 1):
                 init_n = n

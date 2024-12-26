@@ -2,20 +2,32 @@ Usage:
     command [OPTIONS] [ARGUMENTS]
 
 Command and options:
-	agents		-			Agent related commands
-			list			List of agents
-			id [agent's id]		Show detail of an specific agent
-			remove [agent's id]	Remove a specific agent
-			remove_all		Remove all agents
+	agents		-								Agent related commands
+			list								List of agents
+			id [agent's id]							Show detail of an specific agent
+			remove [agent's id]						Remove a specific agent
+			remove_all							Remove all agents
 
-	server		-			Server related commands
-			status			Show all current info that related to server (port, key, ...)
+	server		-								Server related commands
+			status								Show all current info that related to server (port, key, ...)
 
-	agent_exec	-			Agent execute related commands
-			all [cmd]
-			id [agent's id] [cmd]
+	agent_exec	-								Agent execute related commands
+			all [cmd]							Make all agents excute cmd
+			id [agent's id] [cmd]						Make an agent excute cmd
+
+	set_para	-								Set parameter related commands
+			[para1]=[val1] [para2]=[val2] ...				Set value for parameters for simulate
+			list								Show parameters list
+
+	simulate	-								Simulate related commands
+			all								Simulate all breach and attack
+			[attack's name]							Simulate an attack
+
+	help										Show this help
+
+	ba_list										Show breach and attack list
 
 Example:
-	agents list			This command will show the list of agents
+	agents list									This command will show the list of agents
 	agent_exec all whoami
 	agent_exec all "echo hi"
