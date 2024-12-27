@@ -3,6 +3,7 @@ import subprocess
 import urllib.request
 import platform
 import ctypes
+import sys
 
 def win():
     def download_nmap_installer(url, save_path):
@@ -42,6 +43,30 @@ def win():
     # Cleanup: Remove the installer
     os.remove(installer_path)
     print("Installer removed.")
+
+def linux():
+    def install_system_package(package):
+        try:
+            print(f"Installing system package: {package}")
+            subprocess.check_call(["sudo", "apt", "install", "-y", package])
+        except subprocess.CalledProcessError:
+            print(f"Failed to install system package: {package}")
+            sys.exit(1)
+
+    def install_python_package(package):
+        try:
+            print(f"Installing Python package: {package}")
+            subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+        except subprocess.CalledProcessError:
+            print(f"Failed to install Python package: {package}")
+            sys.exit(1)
+
+    # Install system package 'nmap'
+    install_system_package("nmap")
+
+    # Install Python package 'python-nmap'
+    install_python_package("python-nmap")
+
 
 def ask_privileges(os_type):
     if os_type == "Windows":
