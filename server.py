@@ -722,6 +722,8 @@ def excute_cmd(cmd_args: list): ###
             server_cmd(cmd_args)
         case "agent_exec":
             agent_exec_cmd(cmd_args)
+        case "ba_list":
+            print("Breach and attack list:",attacks)
         case "help":
             with open("help.txt",'r') as help_:
                 print(help_.read())
@@ -749,6 +751,10 @@ def simulate_cmd(cmd_args: list):
                     target_network = parameter_list['target_network']
 
                 for attack in attacks:
+                    if len(agents) == 0: 
+                        print("* No agents!!!")
+                        return
+
                     if attack in globals():
                         old_stdout = sys.stdout
                         sys.stdout = io.StringIO()
@@ -756,10 +762,14 @@ def simulate_cmd(cmd_args: list):
                             res = "SUCCESS"
                         else:
                             res = "FAILED"
+                        sys.stdout = old_stdout
                     print("#{} - {}".format(attack, res))
 
             else:
                 for attack in attacks:
+                    if len(agents) == 0: 
+                        print("* No agents!!!")
+                        return
                     print("#{}".format(attack))
                     if attack in globals():
                         globals()[attack]()

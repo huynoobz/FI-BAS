@@ -21,6 +21,7 @@ Command and options:
 
 	simulate	-								Simulate related commands
 			all								Simulate all breach and attack
+			all brief							Simulate all breach and attack with brief output
 			[attack's name]							Simulate an attack
 
 	help										Show this help

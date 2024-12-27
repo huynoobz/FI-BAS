@@ -67,6 +67,13 @@ def linux():
     # Install Python package 'python-nmap'
     install_python_package("python-nmap")
 
+def install_r_python_package():
+    try:
+        print(f"Installing require Python package...")
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
+    except subprocess.CalledProcessError:
+        print(f"Failed to install require Python package...")
+        sys.exit(1)
 
 def ask_privileges(os_type):
     if os_type == "Windows":
@@ -91,3 +98,5 @@ if __name__ == "__main__":
         ask_privileges("Linux")
     else:
         print("Operating System: {}".format(os_name))
+
+    install_r_python_package()
