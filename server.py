@@ -29,7 +29,9 @@ os_info = {
         "Architecture": platform.architecture()[0]
     }
 
-attacks = ['ping_scan','syn_scan','udp_scan', 'arp_scan', 'ack_scan','fin_scan','xmas_scan','null_scan','vuln_scan','wordlist_scan','services_scan']
+attacks = ['ping_scan','syn_scan','udp_scan', 'arp_scan', 'ack_scan','fin_scan','xmas_scan','null_scan','vuln_scan','wordlist_scan','services_scan','ip_scan']
+brief_attacks = {"Active Scanning: Scanning IP Blocks - T1595.001": 'ip_scan', "Active Scanning: Vulnerability Scanning - T1595.002": 'vuln_scan', 
+                 "Active Scanning: Wordlist Scanning - T1595.003": 'wordlist_scan',"Gather Victim Host Information - T1592": 'services_scan'}
 
 n_agents = 0
 
@@ -61,6 +63,7 @@ class Agent:
     name = 0
     beacon_n = 0
     os_info = 0
+    ip_info = 0
     def __init__(self, agent_sock, agent_address, beacon_sock, agent_id):
         self.sock = agent_sock
         self.address = agent_address
@@ -120,6 +123,7 @@ def handle_beacon(agent):
         agents[agents.index(agent)].name = aName
         aOs_info = json.loads(sec_recv(agent.sock, key, nonce))
         agents[agents.index(agent)].os_info = aOs_info
+        agents[agents.index(agent)].ip_info = eval(sec_recv(agent.sock,key,nonce).decode())
         
     agent.name = aName
     agent.os_info = aOs_info
@@ -249,13 +253,45 @@ def ping_scan():
         print("** Your network CAN prevent ping scan!")
     return True
 
+def ip_scan():
+    try:
+        target_network = parameter_list['target_network']
+    except:
+        target_network = input("Enter target network (ex:192.168.1.0/24): ")
+
+    a = nm_scanner.scan(hosts=target_network, arguments='-A -p1')
+
+    reachable_hosts = [host for host in nm_scanner.all_hosts() if nm_scanner[host].state() == "up"]
+
+    c_a=0
+    for agent in agents:
+        if agent.address[0] in reachable_hosts:
+            c_a+=1
+            continue
+        for ip in agent.ip_info:
+            if ip in reachable_hosts:
+                c_a+=1
+                break
+
+    print("*There are {}/{} agents exposed by IP BLOCK SCAN.".format(c_a,len(agents)))
+    if c_a == len(agents) and c_a!=0:
+        print("** Your network has NO defense against IP BLOCK SCAN!")
+    elif c_a > 0:
+        print("** Your network can prevent A PART of IP BLOCK SCAN!")
+    elif len(reachable_hosts) == 0:
+        print("** Your network ABSOLUTELY prevent against IP BLOCK SCAN!")
+        return False
+    else:
+        print("** Your network CAN prevent IP BLOCK SCAN!")
+    return True
+
 def syn_scan():
     try:
         target_network = parameter_list['target_network']
     except:
         target_network = input("Enter target network (ex:192.168.1.0/24): ")
     
-    nm_scanner.scan(hosts=target_network, ports='1-1000', arguments='-sS')
+    nm_scanner.scan(hosts=target_network, ports='1', arguments='-sS')
 
     results = {}
     
@@ -283,12 +319,7 @@ def syn_scan():
 
     print("*There are {}/{} agents exposed by SYN scan.".format(len(c_a),len(agents)))
 
-    c=0
-    for i in c_a.keys():
-        print("*Agent's id: {}\n*Agent's exposed ports: {}/1000\n*Agent's exposed open ports: {}\n\n---\n"
-                .format(i, 1000 - c_a[i][2], c_a[i][0]))
-        if c_a[i][2] == 0:
-            c+=1
+    c=len(c_a)
 
     if c == len(agents) and c!=0:
         print("** Your agents have NO defense against SYN scan!")
@@ -305,7 +336,7 @@ def udp_scan():
     except:
         target_network = input("Enter target network (ex:192.168.1.0/24): ")
     
-    nm_scanner.scan(hosts=target_network, ports='1-1000', arguments='-sU')
+    nm_scanner.scan(hosts=target_network, ports='1', arguments='-sU')
 
     results = {}
     
@@ -333,12 +364,7 @@ def udp_scan():
 
     print("*There are {}/{} agents exposed by UDP scan.".format(len(c_a),len(agents)))
 
-    c=0
-    for i in c_a.keys():
-        print("*Agent's id: {}\n*Agent's exposed ports: {}/1000\n*Agent's exposed open ports: {}\n\n---\n"
-                .format(i, 1000 - c_a[i][2], c_a[i][0]))
-        if c_a[i][2] == 0:
-            c+=1
+    c=len(c_a)
 
     if c == len(agents) and c!=0:
         print("** Your agents have NO defense against UDP scan!")
@@ -395,7 +421,7 @@ def ack_scan():
     except:
         target_network = input("Enter target network (ex:192.168.1.0/24): ")
     
-    nm_scanner.scan(hosts=target_network, ports='1-1000', arguments='-sA')
+    nm_scanner.scan(hosts=target_network, ports='1', arguments='-sA')
 
     results = {}
     
@@ -423,12 +449,7 @@ def ack_scan():
 
     print("*There are {}/{} agents exposed by ACK scan.".format(len(c_a),len(agents)))
 
-    c=0
-    for i in c_a.keys():
-        print("*Agent's id: {}\n*Agent's exposed ports: {}/1000\n*Agent's exposed open ports: {}\n\n---\n"
-                .format(i, 1000 - c_a[i][2], c_a[i][0]))
-        if c_a[i][2] == 0:
-            c+=1
+    c=len(c_a)
 
     if c == len(agents) and c!=0:
         print("** Your agents have NO defense against ACK scan!")
@@ -445,7 +466,7 @@ def fin_scan():
     except:
         target_network = input("Enter target network (ex:192.168.1.0/24): ")
     
-    nm_scanner.scan(hosts=target_network, ports='1-1000', arguments='-sF')
+    nm_scanner.scan(hosts=target_network, ports='1', arguments='-sF')
 
     results = {}
     
@@ -473,12 +494,7 @@ def fin_scan():
 
     print("*There are {}/{} agents exposed by FIN scan.".format(len(c_a),len(agents)))
 
-    c=0
-    for i in c_a.keys():
-        print("*Agent's id: {}\n*Agent's exposed ports: {}/1000\n*Agent's exposed open ports: {}\n\n---\n"
-                .format(i, 1000 - c_a[i][2], c_a[i][0]))
-        if c_a[i][2] == 0:
-            c+=1
+    c=len(c_a)
 
     if c == len(agents) and c!=0:
         print("** Your agents have NO defense against FIN scan!")
@@ -495,7 +511,7 @@ def xmas_scan():
     except:
         target_network = input("Enter target network (ex:192.168.1.0/24): ")
     
-    nm_scanner.scan(hosts=target_network, ports='1-1000', arguments='-sX')
+    nm_scanner.scan(hosts=target_network, ports='1', arguments='-sX')
 
     results = {}
     
@@ -523,12 +539,7 @@ def xmas_scan():
 
     print("*There are {}/{} agents exposed by Xmas scan.".format(len(c_a),len(agents)))
 
-    c=0
-    for i in c_a.keys():
-        print("*Agent's id: {}\n*Agent's exposed ports: {}/1000\n*Agent's exposed open ports: {}\n\n---\n"
-                .format(i, 1000 - c_a[i][2], c_a[i][0]))
-        if c_a[i][2] == 0:
-            c+=1
+    c=len(c_a)
 
     if c == len(agents) and c!=0:
         print("** Your agents have NO defense against Xmas scan!")
@@ -545,7 +556,7 @@ def null_scan():
     except:
         target_network = input("Enter target network (ex:192.168.1.0/24): ")
     
-    nm_scanner.scan(hosts=target_network, ports='1-1000', arguments='-sX')
+    nm_scanner.scan(hosts=target_network, ports='1', arguments='-sX')
 
     results = {}
     
@@ -573,12 +584,7 @@ def null_scan():
 
     print("*There are {}/{} agents exposed by NULL scan.".format(len(c_a),len(agents)))
 
-    c=0
-    for i in c_a.keys():
-        print("*Agent's id: {}\n*Agent's exposed ports: {}/1000\n*Agent's exposed open ports: {}\n\n---\n"
-                .format(i, 1000 - c_a[i][2], c_a[i][0]))
-        if c_a[i][2] == 0:
-            c+=1
+    c=len(c_a)
 
     if c == len(agents) and c!=0:
         print("** Your agents have NO defense against NULL scan!")
@@ -723,7 +729,8 @@ def excute_cmd(cmd_args: list): ###
         case "agent_exec":
             agent_exec_cmd(cmd_args)
         case "ba_list":
-            print("Breach and attack list:",attacks)
+            print("*Breach and attack list:",attacks)
+            print("*Brief B&A list:",brief_attacks)
         case "help":
             with open("help.txt",'r') as help_:
                 print(help_.read())
@@ -750,7 +757,8 @@ def simulate_cmd(cmd_args: list):
                     parameter_list['target_network'] = input("Enter target network (ex:192.168.1.0/24): ")
                     target_network = parameter_list['target_network']
 
-                for attack in attacks:
+                for key in brief_attacks.keys():
+                    attack = brief_attacks[key]
                     if len(agents) == 0: 
                         print("* No agents!!!")
                         return
@@ -763,7 +771,7 @@ def simulate_cmd(cmd_args: list):
                         else:
                             res = "FAILED"
                         sys.stdout = old_stdout
-                    print("#{} - {}".format(attack, res))
+                    print("#{} --- {}".format(key, res))
 
             else:
                 for attack in attacks:
