@@ -602,7 +602,7 @@ def vuln_scan():
         
     results = {}
 
-    nm_scanner.scan(hosts=','.join(hosts), arguments='--script vuln')
+    nm_scanner.scan(hosts=', '.join(hosts), arguments='--script vuln')
     for host in nm_scanner.all_hosts():
         results[host] = 0
         for protocol in nm_scanner[host].all_protocols():
@@ -641,7 +641,7 @@ def wordlist_scan():
         
     results = {}
 
-    nm_scanner.scan(hosts=','.join(hosts), arguments='--script http-enum')
+    nm_scanner.scan(hosts=', '.join(hosts), arguments='--script http-enum')
     for host in nm_scanner.all_hosts():
         results[host] = 0
         for protocol in nm_scanner[host].all_protocols():
@@ -679,7 +679,7 @@ def services_scan():
         
     results = {}
 
-    nm_scanner.scan(hosts=','.join(hosts), arguments='-sV -Pn -T5')
+    nm_scanner.scan(hosts=', '.join(hosts), arguments='-sV -Pn -T5')
     for agent in agents:
         agent_cmd = "simulate services_scan"
         sec_sendall(agent_cmd.encode(),agent.sock, key, nonce)
