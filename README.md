@@ -20,3 +20,4 @@ Server <---> Firewall <---> IPS <---> Agent
 - Bước 1: Chạy server.py trên server
 - Bước 2: Chạy agent.py trên agent
 - Bước 3: Nhập các đầu vào cần thiết cho agent (các giá trị mà server.py đưa ra mà hình)
+- Bước 4: Nhập "help" vào server.py để xem hướng dẫn và quyết định các bước tiếp theo.
